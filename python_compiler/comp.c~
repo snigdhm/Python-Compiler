@@ -1,0 +1,96 @@
+#include <stdio.h> 
+#include "calc3.h" 
+#include "y.tab.h" 
+static int lbl; 
+int ex(nodeType *p) { 
+    int lbl1, lbl2; 
+    if (!p) return 0; 
+    switch(p->type) { 
+    case typeCon:        
+        printf("\t->\t%d\n", p->con.value); 
+        break; 
+    case typeId:         
+        printf("\t->\t%s\n", p->id.i);  
+        break; 
+    case typeOpr: 
+        switch(p->opr.oper) { 
+        case WHILE: 
+            printf("->%03d:\n", lbl1 = lbl++); 
+            ex(p->opr.op[0]); 
+            printf("\t->%03d\n", lbl2 = lbl++); 
+            ex(p->opr.op[1]); 
+            printf("\t->%03d\n", lbl1); 
+            printf("->%03d:\n", lbl2); 
+            break; 
+        case IF: 
+            ex(p->opr.op[0]); 
+            if (p->opr.nops > 2) { 
+                /* if else */ 
+                printf("\t->%03d\n", lbl1 = lbl++); 
+                ex(p->opr.op[1]); 
+                printf("\t->%03d\n", lbl2 = lbl++); 
+                printf("->%03d:\n", lbl1); 
+                ex(p->opr.op[2]); 
+                printf("->%03d:\n", lbl2); 
+            } else { 
+ 
+                printf("\t->%03d\n", lbl1 = lbl++); 
+                ex(p->opr.op[1]); 
+                printf("->%03d:\n", lbl1); 
+            }
+            break; 
+        case PRINT:      
+            ex(p->opr.op[0]); 
+            printf("\t->print\n"); 
+            break; 
+		case INPUT:      
+            ex(p->opr.op[0]); 
+            printf("\t->input\n"); 
+            break; 
+        case '=':        
+            ex(p->opr.op[1]); 
+            printf("\t->\t%s\n", p->opr.op[0]->id.i); 
+            break; 
+        case UMINUS:     
+            ex(p->opr.op[0]); 
+            printf("\t->UMINUS\n"); 
+            break; 
+		case NOT:     
+            ex(p->opr.op[0]); 
+            printf("\t->NOT\n"); 
+            break;
+		case RETURN:     
+            ex(p->opr.op[0]); 
+            printf("\t->RETURN\n"); 
+            break;
+		case BREAK:     
+            ex(p->opr.op[0]); 
+            printf("\t->BREAK\n"); 
+            break;
+		case CONTINUE:     
+            ex(p->opr.op[0]); 
+            printf("\t->CONTINUE\n"); 
+            break;
+        default: 
+            ex(p->opr.op[0]); 
+            ex(p->opr.op[1]); 
+            switch(p->opr.opr) { 
+            case '+':   printf("\t->+\n"); break; 
+            case '-':   printf("\t->-\n"); break; 
+            case '*':   printf("\t->*\n"); break; 
+            case '/':   printf("\t->/\n"); break; 
+            case '<':   printf("\t-> <\n"); break; 
+            case '>':   printf("\t-> >\n"); break; 
+            case GE:    printf("\t-> >=\n"); break; 
+            case LE:    printf("\t-> <=\n"); break; 
+            case NE:    printf("\t-> !=\n"); break; 
+            case EQ:    printf("\t-> ==\n"); break; 
+			case AND:    printf("\t-> and\n"); break;
+			case OR:    printf("\t-> or\n"); break;
+			case IN:    printf("\t-> in\n"); break;
+			//case NOT_IN:    printf("\t-> not in\n"); break;
+            }
+        }
+    }
+    return 0; 
+} 

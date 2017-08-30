@@ -1,0 +1,11 @@
+SYMBOL TABLE
+
+Scope 0 : 
+Name: k Type: 1
+Name: 4 Type: 1
+Name: j Type: 1
+Name: 3 Type: 1
+Name: i Type: 1
+Name: 2 Type: 1
+Name: l Type: 5
+Name: 1 Type: 1

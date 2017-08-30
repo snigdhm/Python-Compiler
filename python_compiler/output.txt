@@ -1,0 +1,25 @@
+SYMBOLS
+-----------------------------------
+Name       Type       Int_Typ       Return_Type        Offset/Size   Num_Param       Scope 
+----------------------------------------------------------------------------------
+k	identifier	Int		None		  28		None		0
+j	identifier	Int		None		  24		None		0
+i	identifier	Int		None		  20		None		0
+l	l_identifier	Int		None		  0		5		0
+
+
+CODE
+----
+
+0    l [ 0 ] = 1
+1    l [ 4 ] = 2
+2    l [ 8 ] = 3
+3    l [ 12 ] = 4
+4    l [ 16 ] = 5
+5    i := 2
+6    j := 3
+7    k := 4
+8    i_1 := 4 * 4
+9    i_2 := i * j
+10   i_3 := i_2 - k
+11   l [ i_1 ] := i_3

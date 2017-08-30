@@ -1,0 +1,444 @@
+%{ 
+#include <stdio.h> 
+#include <string.h>
+#include <stdlib.h> 
+#include <stdarg.h> 
+#include "calc3.h" 
+/* prototypes */ 
+nodeType *opr(int oper, int nops, ...); 
+nodeType *opra(nodeType *oper, int nops, ...); 
+nodeType *id(char i[20]); 
+nodeType *st(char i[20]);
+nodeType *con(int value); 
+void freeNode(nodeType *p); 
+int ex(nodeType *p); 
+int yylex(void); 
+void yyerror(char *s); 
+int sym[26];  
+extern int yylineno;                  /* symbol table */ 
+%} 
+%union { 
+    int iValue;                 /* integer value */ 
+    char identifier[20];                /* symbol table index */ 
+    char text[20];
+    nodeType *nPtr;             /* node pointer */ 
+}; 
+%token <iValue> DECIMALINTEGER 
+%token <identifier> IDENTIFIER 
+%token <text> STRING
+%token WHILE IF PRINT DEDENT INDENT END_STATEMENT ELSE ELIF INPUT BREAK CONTINUE RETURN DEF 
+%left AND OR IN NOT_IN
+%left GE LE EQ NE '>' '<'  
+%left '+' '-' 
+%left '*' '/' 
+%nonassoc UMINUS NOT
+%type <nPtr> stmt expr codeblock statements elseif list_item arg fdef fcall function list list_
+
+%% 
+program: 
+  function                {  } 
+  ;   
+function: 
+    function stmt         { ex($2); freeNode($2); } 
+  | /* NULL */ 
+  ; 
+
+fdef:
+  DEF IDENTIFIER '(' IDENTIFIER ',' IDENTIFIER ',' IDENTIFIER ')' ':' codeblock { $$=opra(id("fdef"),10, id("def"),id("("), id($4),id(","), id($6),id(","), id($8),id(")"),id(":"),$11); } 
+                        //{ $$=opra(id("fdef"),10, id("def"),'(', id($4),',', id($6),',', id($8),')',':',$11); } 
+  | DEF IDENTIFIER '(' ')' ':' codeblock { $$=opr(DEF,2, id($2),$6); } 
+  ; 
+fcall:
+  IDENTIFIER '(' ')' { $$=opra(id($1),1, NULL); } 
+  | IDENTIFIER '(' arg ',' arg ',' arg ')' { $$=opra(id("fcall"),3, $3, $5, $7); } 
+  ;
+arg:
+  IDENTIFIER  { $$ = id($1); }
+  | DECIMALINTEGER { $$ = con($1); }
+  ;
+
+stmt: 
+    ';'                     { $$ = opr(';', 0); } 
+  | END_STATEMENT                 { $$ = opr(';', 0); } 
+  | expr ';'                   { $$ = $1; } 
+  | expr END_STATEMENT                   { $$ = $1; } 
+  | PRINT '(' expr ')'';'            { $$ = opr(PRINT, 1, $3); } 
+  | PRINT '(' expr ')' END_STATEMENT            { $$ = opr(PRINT, 1, $3); } 
+  | IDENTIFIER '=' expr ';'     { $$ = opr('=', 2, id($1), $3); }
+  | IDENTIFIER '=' expr END_STATEMENT     { $$ = opr('=', 2, id($1), $3); }
+  | list_ '=' expr ';'     { $$ = opr('=', 2, $1, $3); }
+  | list_ '=' expr END_STATEMENT     { $$ = opr('=', 2, $1, $3); }
+  | WHILE '(' expr ')' ':' codeblock { $$ = opr(WHILE, 2, $3, $6); }
+  | IF '(' expr ')' ':' codeblock { $$ = opr(IF, 2, $3, $6); } 
+  | IF '(' expr ')' ':' codeblock elseif ELSE ':' codeblock 
+                          { $$ = opr(IF, 4, $3, $6, $7, $10); } 
+  | '{' statements '}'       { $$ = $2; } 
+  | RETURN expr ';'	    { $$ = opr(RETURN, 1, $2); } 
+  | RETURN expr END_STATEMENT	    { $$ = opr(RETURN, 1, $2); } 
+  | IDENTIFIER '=' INPUT '(' expr ')' END_STATEMENT    { $$ = opr(INPUT, 2,id($1), $5); }
+  | IDENTIFIER '=' INPUT '(' expr ')' ';'    { $$ = opr(INPUT, 2,id($1), $5); } 
+  | CONTINUE END_STATEMENT              { $$ = opr(CONTINUE, 0); } 
+  | CONTINUE ';'              { $$ = opr(CONTINUE, 0); }
+  | BREAK ';'                   { $$ = opr(BREAK, 0); } 
+  | BREAK END_STATEMENT                   { $$ = opr(BREAK, 0); } 
+  | IDENTIFIER '=' list ';'                   {$$ = opr(';', 2, id($1), $3); } 
+  | IDENTIFIER '=' list END_STATEMENT                   {$$ = opr(';', 2, id($1), $3); } 
+  | fdef                   { $$ = $1; } 
+  | fcall ';'                  { $$=$1; }
+  | fcall END_STATEMENT                  { $$=$1; }
+  | IDENTIFIER '=' fcall ';'                  { $$ = opr(';', 2, id($1), $3);  }
+  | IDENTIFIER '=' fcall END_STATEMENT                 { $$ = opr(';', 2, id($1), $3);  }
+  ;
+
+list:
+  '[' list_item ']'     { $$ = opr(';', 1, $2); } 
+  | '['' '']'                 { $$ = opr(';', 0); } 
+  | '[' ']'                 { $$ = opr(';', 0); } 
+  ;
+list_item:
+   list_item ',' DECIMALINTEGER  { $$ = opr(';', 2, $1,con($3)); }
+  | DECIMALINTEGER { $$ = con($1); }
+  ;
+elseif:
+  ELIF '(' expr ')' ':' codeblock elseif  { $$ = opr(ELIF, 3, $3, $6, $7); }
+  |    {$$=NULL;}                             
+  ;
+statements:
+  statements stmt    { $$ =opr(';', 2, $1,$2);  }
+  | stmt                    { $$ = $1; } 
+  ;
+codeblock:
+  INDENT statements DEDENT          { $$ = $2; } 
+  ;
+
+expr: 
+    DECIMALINTEGER               { $$ = con($1); } 
+  | IDENTIFIER              { $$ = id($1); } 
+  | STRING                  { $$ = st($1); }
+  | IDENTIFIER list_                    { $$ = opr(';',2,$1,$2); }
+  | '-' expr %prec UMINUS { $$ = opr(UMINUS, 1, $2); } 
+  | expr '+' expr         { $$ = opr('+', 2, $1, $3); }
+  | expr IN expr         { $$ = opr(IN, 2, $1, $3); } 
+  | expr NOT_IN expr        { $$ = opr(NOT_IN, 2, $1, $3); }
+  | expr '-' expr         { $$ = opr('-', 2, $1, $3); } 
+  | expr '*' expr         { $$ = opr('*', 2, $1, $3); } 
+  | expr '/' expr         { $$ = opr('/', 2, $1, $3); } 
+  | expr '<' expr         { $$ = opr('<', 2, $1, $3); } 
+  | expr '>' expr         { $$ = opr('>', 2, $1, $3); } 
+  | NOT expr %prec NOT    { $$ = opr(NOT, 1, $2); }
+  | expr GE expr          { $$ = opr(GE, 2, $1, $3); } 
+  | expr LE expr          { $$ = opr(LE, 2, $1, $3); } 
+  | expr NE expr          { $$ = opr(NE, 2, $1, $3); } 
+  | expr EQ expr          { $$ = opr(EQ, 2, $1, $3); } 
+  | '(' expr ')'          { $$ = $2; } 
+  | expr AND expr         { $$ = opr(AND, 2, $1, $3); } 
+  | expr OR expr         { $$ = opr(OR, 2, $1, $3); } 
+  ;  
+
+list_:
+ '[' DECIMALINTEGER ']' {$$=opr(';',1,$2);} 
+  | '[' IDENTIFIER ']' {$$=opr(';',1,id($2));}
+  ;
+
+%% 
+#define SIZEOF_NODETYPE ((char *)&p->con - (char *)p) 
+nodeType *con(int value) { 
+    nodeType *p; 
+    /* allocate node */ 
+    if ((p = malloc(sizeof(nodeType))) == NULL) 
+        yyerror("out of memory"); 
+    /* copy information */ 
+    p->type = typeCon; 
+    p->con.value = value; 
+    return p; 
+} 
+nodeType *id(char i[20]) { 
+    nodeType *p; 
+    /* allocate node */ 
+    if ((p = malloc(sizeof(nodeType))) == NULL) 
+        yyerror("out of memory"); 
+    /* copy information */ 
+    p->type = typeId; 
+    strcpy(p->id.i,i); 
+    return p; 
+} 
+
+nodeType *st(char i[20]) { 
+    nodeType *p; 
+    /* allocate node */ 
+    if ((p = malloc(sizeof(nodeType))) == NULL) 
+        yyerror("out of memory"); 
+    /* copy information */ 
+    p->type = typeStr; 
+    strcpy(p->id.i,i); 
+    return p; 
+} 
+
+nodeType *opr(int oper, int nops, ...) {
+    va_list ap; 
+    nodeType *p; 
+    int i; 
+    /* allocate node, extending op array 
+*/ 
+    if ((p = malloc(sizeof(nodeType) + (nops-1) * sizeof(nodeType *))) == NULL) 
+        yyerror("out of memory"); 
+    /* copy information */ 
+    p->type = typeOpr; 
+    p->opr.opr = oper; 
+    p->opr.nops = nops; 
+    va_start(ap, nops); 
+    for (i = 0; i < nops; i++) 
+        p->opr.op[i] = va_arg(ap, nodeType*); 
+    va_end(ap); 
+    return p; 
+} 
+nodeType *opra(nodeType *oper, int nops, ...) {
+    va_list ap; 
+    nodeType *p; 
+    int i; 
+    /* allocate node, extending op array 
+*/ 
+    if ((p = malloc(sizeof(nodeType) + (nops-1) * sizeof(nodeType *))) == NULL) 
+        yyerror("out of memory"); 
+    /* copy information */ 
+    p->type = typeOpr; 
+    strcpy(p->opr.opa,oper->id.i); 
+    p->opr.nops = nops; 
+    va_start(ap, nops); 
+    for (i = 0; i < nops; i++) 
+        p->opr.op[i] = va_arg(ap, nodeType*); 
+    va_end(ap); 
+    return p; 
+} 
+void freeNode(nodeType *p) { 
+    int i; 
+    if (!p) return; 
+    if (p->type == typeOpr) { 
+        for (i = 0; i < p->opr.nops; i++) 
+            freeNode(p->opr.op[i]); 
+    }
+    free (p); 
+} 
+void yyerror(char *s) { 
+    fprintf(stdout, "%s at line no %d\n", s,yylineno); 
+} 
+/*
+int main(void) { 
+    yyparse(); 
+    return 0; 
+} */
+
+
+
+
+
+
+
+////////////////parse tree
+
+/* source code courtesy of Frank Thomas Braun */ 
+#include <stdio.h> 
+#include <stdlib.h> 
+#include <stdarg.h> 
+#include <string.h> 
+#include "calc3.h" 
+#include "y.tab.h" 
+int del = 1; /* distance of graph columns */ 
+int eps = 3; /* distance of graph lines */ 
+/* interface for drawing (can be replaced by "real" graphic using GD or 
+other) */ 
+void graphInit (void); 
+void graphFinish(); 
+void graphBox (char *s, int *w, int *h); 
+void graphDrawBox (char *s, int c, int l); 
+void graphDrawArrow (int c1, int l1, int c2, int l2); 
+/* recursive drawing of the syntax tree */ 
+void exNode (nodeType *p, int c, int l, int *ce, int *cm); 
+/***********************************************************/ 
+/* main entry point of the manipulation of the syntax tree */ 
+int ex (nodeType *p) { 
+    int rte, rtm; 
+    graphInit (); 
+    exNode (p, 0, 0, &rte, &rtm); 
+    graphFinish(); 
+    return 0; 
+} 
+   void exNode(   nodeType *p, 
+        int c, int l,        /* start column and line of node */ 
+        int *ce, int *cm     /* resulting end column and mid of node */ 
+    )
+{ 
+    int w, h;           /* node width and height */ 
+    char *s;            /* 
+node text */ 
+    int cbar;       /* "real" start column of node (centred above subnodes) 
+*/ 
+    int k;              /* child number */ 
+    int che, chm;       /* end column and mid of children */ 
+    int cs;             /* start column of children */ 
+    char word[20];      /* extended node text */ 
+    if (!p) return; 
+    strcpy (word, "???"); /* should never appear */ 
+    s = word; 
+    switch(p->type) { 
+        case typeCon: sprintf (word, "c(%d)", p->con.value); break; 
+        case typeId:  sprintf (word, "id(%s)", p->id.i ); break; 
+	case typeStr:  sprintf (word, "str(%s)", p->str.i ); break;
+        case typeOpr:             switch(p->opr.opr){ 
+                case WHILE:     s = "while"; break; 
+                case IF:        s = "if";    break; 
+                case PRINT:     s = "print"; break; 
+                case ';':       s = "[;]";     break; 
+                case '=':       s = "[=]";     break; 
+                case UMINUS:    s = "[_]";     break;
+                case INPUT:     s = "input";   break;
+                case NOT:       s = "[not]";     break; 
+                case RETURN:    s = "return";  break; 
+                case BREAK:     s = "break";   break; 
+                case CONTINUE:  s = "continue";break;
+                case DEF:       s = "def";    break; 
+		case ELIF:      s = "elif";    break;
+		case NOT_IN:      s = "[not in]";    break;
+                case '+':       s = "[+]";     break; 
+                case '-':       s = "[-]";     break; 
+                case '*':       s = "[*]";     break; 
+                case '/':       s = "[/]";     break; 
+                case '<':       s = "[<]";     break; 
+                case '>':       s = "[>]";     break; 
+                case GE:        s = "[>=]";    break; 
+                case LE:        s = "[<=]";    break; 
+                case NE:        s = "[!=]";    break; 
+                case EQ:        s = "[==]";    break; 
+		case AND:       s = "[and]";   break;
+		case OR:        s = "[or]";    break;
+		case IN:        s = "[in]";    break;
+            }
+        if(strcmp(p->opr.opa,"fdef")==0)
+		s="[fdef]";
+	else if(strcmp(p->opr.opa,"fcall")==0)
+		s="[fcall]";
+	else if(strcmp(p->opr.opa,"arg")==0)
+		s="[arg]";
+	else if(strcmp(p->opr.opa,"stmt")==0)
+		s="[stmt]";
+	else if(strcmp(p->opr.opa,"list")==0)
+		s="[list]";
+	else if(strcmp(p->opr.opa,"list_item")==0)
+		s="[list_item]";
+	else if(strcmp(p->opr.opa,"elseif")==0)
+		s="[elseif]";
+	else if(strcmp(p->opr.opa,"statements")==0)
+		s="[statements]";
+	else if(strcmp(p->opr.opa,"codeblock")==0)
+		s="[codeblock]";
+	else if(strcmp(p->opr.opa,"expr")==0)
+		s="[expr]";
+	else if(strcmp(p->opr.opa,"list_")==0)
+		s="[list_]";
+            break; 
+    }
+    /* construct node text 
+box */ 
+    graphBox (s, &w, &h); 
+    cbar = c; 
+    *ce = c + w; 
+    *cm = c + w / 2; 
+    /* node is leaf */ 
+    if (p->type == typeCon || p->type == typeId || p->opr.nops == 0) { 
+        graphDrawBox (s, cbar, l); 
+        return; 
+    }
+    /* node has children */ 
+    cs = c; 
+    for (k = 0; k < p->opr.nops; k++) { 
+        exNode (p->opr.op[k], cs, l+h+eps, &che, &chm); 
+        cs = che; 
+    }
+    /* total node width */ 
+    if (w < che - c) { 
+        cbar += (che - c - w) / 2; 
+        *ce = che; 
+        *cm = (c + che) / 2; 
+    }
+    /* draw node */ 
+    graphDrawBox (s, cbar, l); 
+    /* draw arrows (not optimal: children are drawn a second time) */ 
+    cs = c; 
+    for (k = 0; k < p->opr.nops; k++) { 
+        exNode (p->opr.op[k], cs, l+h+eps, &che, &chm); 
+        graphDrawArrow (*cm, l+h, chm, l+h+eps-1); 
+        cs = che; 
+    }
+} 
+/* interface for drawing */ 
+#define lmax 200 
+#define cmax 200 
+char graph[lmax][cmax]; /* array for ASCII-
+Graphic */ 
+int graphNumber = 0; 
+void graphTest (int l, int c) 
+{   int ok; 
+    ok = 1; 
+    if (l < 0) ok = 0; 
+    if (l >= lmax) ok = 0; 
+    if (c < 0) ok = 0; 
+    if (c >= cmax) ok = 0; 
+    if (ok) return; 
+    printf ("\n+++error: l=%d, c=%d not in drawing rectangle 0, 0 ... %d,%d", l, c, lmax, cmax); 
+    exit (1); 
+} 
+void graphInit (void) { 
+    int i, j; 
+    for (i = 0; i < lmax; i++) { 
+        for (j = 0; j < cmax; j++) { 
+            graph[i][j] = ' '; 
+        }
+    }
+} 
+void graphFinish() { 
+    int i, j; 
+    for (i = 0; i < lmax; i++) { 
+        for (j = cmax-1; j > 0 && graph[i][j] == ' '; j--); 
+        graph[i][cmax-1] = 0; 
+        if (j < cmax-1) graph[i][j+1] = 0; 
+        if (graph[i][j] == ' ') graph[i][j] = 0; 
+    }
+    for (i = lmax-1; i > 0 && graph[i][0] == 0; i--); 
+    printf ("\n\nGraph %d:\n", graphNumber++); 
+    for (j = 0; j <= i; j++) printf ("\n%s", graph[j]); 
+    printf("\n"); 
+} 
+void graphBox (char *s, int *w, int *h) { 
+    *w = strlen (s) + del; 
+    *h = 1; 
+} 
+void graphDrawBox (char *s, int c, int l) { 
+    int i;
+    graphTest (l, c+strlen(s)-1+del); 
+    for (i = 0; i < strlen (s); i++) { 
+        graph[l][c+i+del] = s[i]; 
+    }
+} 
+void graphDrawArrow (int c1, int l1, int c2, int l2) { 
+    int m; 
+    graphTest (l1, c1); 
+    graphTest (l2, c2); 
+    m = (l1 + l2) / 2; 
+    while (l1 != m) { 
+        graph[l1][c1] = '|'; if (l1 < l2) l1++; else l1--;
+    }
+    while (c1 != c2) { 
+        graph[l1][c1] = '-'; if (c1 < c2) c1++; else c1--;
+    }
+    while (l1 != l2) { 
+        graph[l1][c1] = '|'; if (l1 < l2) l1++; else l1--;
+    }
+    graph[l1][c1] = '|'; 
+} 
+
+
+
+
+
+
+
